@@ -2405,10 +2405,37 @@ The value may not exceed 65533.
 
 .TP
 \fBMaxBatchRequeue\fR
-Maximum number of times a batch job may be automatically requeued before
-being marked as JobHeldAdmin. (Mainly useful when the \fBSchedulerParameters\fR
-option \fBnohold_on_prolog_fail\fR is enabled.)
+Maximum number of times a batch job may be automatically requeued due to a
+launch or prolog failure before being held. The job is held (with reason
+\fBJobHoldMaxRequeue\fR) once it has been requeued for a launch/prolog failure
+more than this many times. Requeues caused by node failure or preemption are
+bounded separately by \fBMaxNodeFailRequeue\fR and \fBMaxPreemptRequeue\fR and
+do not count against this limit. (Mainly useful when the
+\fBSchedulerParameters\fR option \fBnohold_on_prolog_fail\fR is enabled.)
 The default value is 5.
+.IP
+
+.TP
+\fBMaxNodeFailRequeue\fR
+Maximum number of times a batch job may be automatically requeued because an
+allocated node failed (went DOWN). The job is held (with reason
+\fBJobHoldMaxNodeFailRequeue\fR) once it has been requeued due to node failure
+more than this many times, bounding jobs that keep landing on failing hardware
+independently of \fBMaxBatchRequeue\fR. A value of 0 means unlimited (such
+requeues never hold the job).
+The default value is 10.
+.IP
+
+.TP
+\fBMaxPreemptRequeue\fR
+Maximum number of times a batch job may be requeued because of preemption or an
+operator/user \fBscontrol requeue\fR. The job is held (with reason
+\fBJobHoldMaxPreemptRequeue\fR) once it has been requeued for one of those
+reasons more than this many times. A \fBscontrol requeuehold\fR (or a requeue
+into a held/special-exit state) is an explicit hold and is not counted here.
+A value of 0 means unlimited (such requeues never hold the job); set it high to
+avoid penalizing jobs that are expected to be preempted frequently.
+The default value is 100.
 .IP
 
 .TP
