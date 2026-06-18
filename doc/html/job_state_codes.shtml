@@ -89,6 +89,12 @@ For more visibility into the job states and flags, set
 <tr><td><code>REQUEUE_HOLD</code></td><td>same as <code>REQUEUED</code> but will
 	not be considered for scheduling until it is
 	<a href="scontrol.html#OPT_release">released</a></td></tr>
+<tr><td><code>REQUEUE_NODE_FAIL</code></td><td>requeued because a node it was
+	running on failed; lets a requeued job be distinguished from a
+	<a href="preempt.html">preemption</a> requeue</td></tr>
+<tr><td><code>REQUEUE_PREEMPT</code></td><td>requeued because it was
+	<a href="preempt.html">preempted</a> by a higher-priority job
+	(<code>PreemptMode=REQUEUE</code>)</td></tr>
 <tr><td><code>RESIZING</code></td><td>the size of the job is changing; prevents
 	conflicting job changes from taking place</td></tr>
 <tr><td><code>RESV_DEL_HOLD</code></td><td>held due to deleted reservation</td></tr>

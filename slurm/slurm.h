@@ -312,6 +312,10 @@ enum job_states {
 #define JOB_SIGNALING     SLURM_BIT(22) /* Outgoing signal is pending */
 #define JOB_STAGE_OUT     SLURM_BIT(23) /* Staging out data (burst buffer) */
 #define JOB_EXPEDITING SLURM_BIT(24) /* checking for expedited requeue */
+#define JOB_REQUEUE_PREEMPT SLURM_BIT(25) /* Requeued because preempted, as
+					   * opposed to a node failure */
+#define JOB_REQUEUE_NODE_FAIL SLURM_BIT(26) /* Requeued because an allocated
+					     * node failed */
 
 #define READY_JOB_FATAL	   -2	/* fatal error */
 #define READY_JOB_ERROR    -1	/* ordinary error */

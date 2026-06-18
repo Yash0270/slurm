@@ -2892,6 +2892,10 @@ extern char *job_state_string(uint32_t inx)
 		return "EXPEDITING";
 	if (inx & JOB_RESIZING)
 		return "RESIZING";
+	if (inx & JOB_REQUEUE_PREEMPT)
+		return "REQUEUE_PREEMPT";
+	if (inx & JOB_REQUEUE_NODE_FAIL)
+		return "REQUEUE_NODE_FAIL";
 	if (inx & JOB_REQUEUE)
 		return "REQUEUED";
 	if (inx & JOB_REQUEUE_FED)
@@ -2951,6 +2955,10 @@ extern char *job_state_string_compact(uint32_t inx)
 		return "CF";
 	if (inx & JOB_RESIZING)
 		return "RS";
+	if (inx & JOB_REQUEUE_PREEMPT)
+		return "RP";
+	if (inx & JOB_REQUEUE_NODE_FAIL)
+		return "RN";
 	if (inx & JOB_REQUEUE)
 		return "RQ";
 	if (inx & JOB_REQUEUE_FED)
@@ -3092,6 +3100,10 @@ extern char *job_state_string_complete(uint32_t state)
 		xstrcat(state_str, ",SIGNALING");
 	if (state & JOB_STAGE_OUT)
 		xstrcat(state_str, ",STAGE_OUT");
+	if (state & JOB_REQUEUE_PREEMPT)
+		xstrcat(state_str, ",REQUEUE_PREEMPT");
+	if (state & JOB_REQUEUE_NODE_FAIL)
+		xstrcat(state_str, ",REQUEUE_NODE_FAIL");
 
 	return state_str;
 }
@@ -3130,6 +3142,10 @@ extern uint32_t job_state_num(const char *state_name)
 		return JOB_REQUEUE_FED;
 	if (_job_name_test(JOB_REQUEUE_HOLD, state_name))
 		return JOB_REQUEUE_HOLD;
+	if (_job_name_test(JOB_REQUEUE_PREEMPT, state_name))
+		return JOB_REQUEUE_PREEMPT;
+	if (_job_name_test(JOB_REQUEUE_NODE_FAIL, state_name))
+		return JOB_REQUEUE_NODE_FAIL;
 	if (_job_name_test(JOB_REVOKED, state_name))
 		return JOB_REVOKED;
 	if (_job_name_test(JOB_SIGNALING, state_name))
