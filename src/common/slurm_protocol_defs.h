@@ -132,6 +132,10 @@
 	(_X->job_state & JOB_STAGE_OUT)
 #define IS_JOB_EXPEDITING(_X)		\
 	(_X->job_state & JOB_EXPEDITING)
+#define IS_JOB_PREEMPT_REQUEUED(_X)	\
+	(_X->job_state & JOB_REQUEUE_PREEMPT)
+#define IS_JOB_NODE_FAIL_REQUEUED(_X)	\
+	(_X->job_state & JOB_REQUEUE_NODE_FAIL)
 
 /* DB FLAG state */
 #define IS_JOB_IN_DB(_X) \

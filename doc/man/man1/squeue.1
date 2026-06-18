@@ -1882,6 +1882,17 @@ Held job is being requeued.
 .IP
 
 .TP
+\fBRN  REQUEUE_NODE_FAIL\fR
+Job is pending again after being requeued because a node it was running on
+failed. Distinguishes a node\-failure requeue from a preemption requeue.
+.IP
+
+.TP
+\fBRP  REQUEUE_PREEMPT\fR
+Job is pending again after being preempted and requeued (PreemptMode=REQUEUE).
+.IP
+
+.TP
 \fBRQ  REQUEUED\fR
 Completing job is being requeued.
 .IP

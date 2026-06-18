@@ -3062,6 +3062,14 @@ static int _foreach_kill_running_job_by_node(void *x, void *arg)
 
 			_set_requeued_job_pending_completing(job_ptr);
 
+			/*
+			 * Record that this requeue was triggered by a node
+			 * failure so a requeued/pending job can be told apart
+			 * from one requeued due to preemption.
+			 */
+			job_state_unset_flag(job_ptr, JOB_REQUEUE_PREEMPT);
+			job_state_set_flag(job_ptr, JOB_REQUEUE_NODE_FAIL);
+
 			job_ptr->restart_cnt++;
 
 			if (job_ptr->bit_flags & EXPEDITED_REQUEUE) {
@@ -6184,6 +6192,8 @@ static int _job_complete(job_record_t *job_ptr, uid_t uid, bool requeue,
 	}
 
 	if (requeue && job_ptr->details && job_ptr->batch_flag) {
+		bool preempt_requeue = (job_ptr->bit_flags & GRACE_PREEMPT);
+
 		/*
 		 * We want this job to look like it was terminated in the
 		 * accounting logs. Set a new submit time so the restarted
@@ -6227,6 +6237,20 @@ static int _job_complete(job_record_t *job_ptr, uid_t uid, bool requeue,
 
 
 		job_state_set(job_ptr, (JOB_PENDING | job_comp_flag));
+
+		/*
+		 * Record why the job was requeued (grace-time preemption or
+		 * node failure) so a requeued/pending job can be told apart
+		 * from one requeued for other reasons. See also
+		 * _job_requeue_op() and _foreach_kill_running_job_by_node().
+		 */
+		job_state_unset_flag(
+			job_ptr, (JOB_REQUEUE_PREEMPT | JOB_REQUEUE_NODE_FAIL));
+		if (preempt_requeue)
+			job_state_set_flag(job_ptr, JOB_REQUEUE_PREEMPT);
+		else if (node_fail)
+			job_state_set_flag(job_ptr, JOB_REQUEUE_NODE_FAIL);
+
 		job_ptr->exit_code = 0;
 		/*
 		 * Since the job completion logger removes the job submit
@@ -17913,6 +17937,18 @@ reply:
 
 	/* clear signal sent flag on requeue */
 	job_ptr->warn_flags &= ~WARN_SENT;
+
+	/*
+	 * Record whether this requeue was caused by preemption so a
+	 * requeued/pending job can be told apart from one requeued due to a
+	 * node failure (see _foreach_kill_running_job_by_node()). Other
+	 * requeue causes (scontrol requeue, RequeueExit, launch failure)
+	 * intentionally leave both cause flags unset.
+	 */
+	job_state_unset_flag(job_ptr,
+			     (JOB_REQUEUE_PREEMPT | JOB_REQUEUE_NODE_FAIL));
+	if (preempt)
+		job_state_set_flag(job_ptr, JOB_REQUEUE_PREEMPT);
 
 	/*
 	 * Since the job completion logger removes the submit we need

@@ -602,6 +602,10 @@ static const char *_job_state_list(void)
 	xstrcat(state_names, ",");
 	xstrcat(state_names, job_state_string(JOB_REQUEUE_HOLD));
 	xstrcat(state_names, ",");
+	xstrcat(state_names, job_state_string(JOB_REQUEUE_PREEMPT));
+	xstrcat(state_names, ",");
+	xstrcat(state_names, job_state_string(JOB_REQUEUE_NODE_FAIL));
+	xstrcat(state_names, ",");
 	xstrcat(state_names, job_state_string(JOB_REVOKED));
 	xstrcat(state_names, ",");
 	xstrcat(state_names, job_state_string(JOB_SIGNALING));
