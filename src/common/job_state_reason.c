@@ -882,6 +882,12 @@ const static entry_t jsra[] = {
 	[WAIT_MPI_PORTS_BUSY] = {
 		.str = "MpiPortsBusy",
 	},
+	[WAIT_MAX_NODE_FAIL_REQUEUE] = {
+		.str = "JobHoldMaxNodeFailRequeue",
+	},
+	[WAIT_MAX_PREEMPT_REQUEUE] = {
+		.str = "JobHoldMaxPreemptRequeue",
+	},
 };
 
 extern const char *job_state_reason_string(enum job_state_reason inx)

@@ -10,7 +10,17 @@ See the [Upgrade Guide](https://slurm.schedmd.com/upgrades.html) for further det
 
 ## New Features
 
+* Cause-aware batch job requeue limits: node-failure and preemption requeues are
+  now counted and bounded separately from launch/prolog-failure requeues, each
+  with its own limit and hold reason (JobHoldMaxNodeFailRequeue /
+  JobHoldMaxPreemptRequeue).
+
 ## Configuration Changes
+
+* Added MaxNodeFailRequeue (default 10, 0 = unlimited) to bound batch job
+  requeues caused by node failure.
+* Added MaxPreemptRequeue (default 100, 0 = unlimited) to bound batch job
+  requeues caused by preemption or scontrol requeue.
 
 ## Packaging Changes
 

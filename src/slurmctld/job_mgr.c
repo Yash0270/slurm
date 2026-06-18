@@ -366,6 +366,18 @@ static void _add_job_hash(job_record_t *job_ptr);
 static void _add_job_hash_sluid(job_record_t *job_ptr);
 static void _add_job_array_hash(job_record_t *job_ptr);
 static void _handle_requeue_limit(job_record_t *job_ptr, const char *caller);
+/*
+ * Requeue cause used to select which per-cause counter and limit applies.
+ * USER (scontrol requeue) is counted in the same bucket as PREEMPT.
+ */
+enum {
+	REQUEUE_CAUSE_FAILURE,	 /* prolog/launch failure, RequeueExit */
+	REQUEUE_CAUSE_NODE_FAIL, /* allocated node down/failed */
+	REQUEUE_CAUSE_PREEMPT,	 /* preemption (immediate + grace) */
+	REQUEUE_CAUSE_USER,	 /* scontrol/operator requeue */
+};
+static void _handle_requeue_limits(job_record_t *job_ptr, int cause,
+				   const char *caller);
 static int  _copy_job_desc_to_file(job_desc_msg_t * job_desc,
 				   uint32_t job_id);
 static int  _copy_job_desc_to_job_record(job_desc_msg_t * job_desc,
@@ -3080,6 +3092,11 @@ static int _foreach_kill_running_job_by_node(void *x, void *arg)
 			 * again.
 			 */
 			acct_policy_add_job_submit(job_ptr, false);
+
+			/* hold job if over the node-failure requeue limit */
+			_handle_requeue_limits(job_ptr,
+					       REQUEUE_CAUSE_NODE_FAIL,
+					       __func__);
 
 			if (!job_ptr->node_bitmap_cg ||
 			    bit_ffs(job_ptr->node_bitmap_cg) == -1)
@@ -6111,6 +6128,65 @@ static void _handle_requeue_limit(job_record_t *job_ptr, const char *caller)
 	job_ptr->priority = 0;
 }
 
+/*
+ * Hold a job that has exceeded a per-cause requeue limit.
+ * Centralizes the requeue-hold (flag + reason + state_desc + priority 0).
+ */
+static void _hold_requeue_limit(job_record_t *job_ptr,
+				enum job_state_reason reason,
+				const char *state_desc, const char *caller)
+{
+	debug("%s: Holding %pJ, %s", caller, job_ptr, state_desc);
+
+	job_state_set_flag(job_ptr, JOB_REQUEUE_HOLD);
+	job_ptr->state_reason = reason;
+	xfree(job_ptr->state_desc);
+	job_ptr->state_desc = xstrdup(state_desc);
+	job_ptr->priority = 0;
+}
+
+/*
+ * Increment the per-cause requeue counter and hold the job if it has been
+ * requeued for that cause more times than the limit allows. Each cause has an
+ * independent counter and limit:
+ *   FAILURE   -> batch_flag / MaxBatchRequeue / WAIT_MAX_REQUEUE (unchanged)
+ *   NODE_FAIL -> node_fail_requeue_cnt / MaxNodeFailRequeue
+ *   PREEMPT   -> preempt_requeue_cnt / MaxPreemptRequeue
+ *   USER      -> counted in the PREEMPT bucket (not the job's fault)
+ * A limit of 0 means unlimited (never hold) for the NODE_FAIL/PREEMPT buckets.
+ * The caller bumps batch_flag for the FAILURE cause (existing behavior); this
+ * helper owns the NODE_FAIL/PREEMPT counters.
+ */
+static void _handle_requeue_limits(job_record_t *job_ptr, int cause,
+				   const char *caller)
+{
+	switch (cause) {
+	case REQUEUE_CAUSE_NODE_FAIL:
+		if ((++job_ptr->node_fail_requeue_cnt >
+		     slurm_conf.max_node_fail_requeue) &&
+		    slurm_conf.max_node_fail_requeue)
+			_hold_requeue_limit(
+				job_ptr, WAIT_MAX_NODE_FAIL_REQUEUE,
+				"node failure requeue limit exceeded requeued held",
+				caller);
+		break;
+	case REQUEUE_CAUSE_PREEMPT:
+	case REQUEUE_CAUSE_USER:
+		if ((++job_ptr->preempt_requeue_cnt >
+		     slurm_conf.max_preempt_requeue) &&
+		    slurm_conf.max_preempt_requeue)
+			_hold_requeue_limit(
+				job_ptr, WAIT_MAX_PREEMPT_REQUEUE,
+				"preemption requeue limit exceeded requeued held",
+				caller);
+		break;
+	case REQUEUE_CAUSE_FAILURE:
+	default:
+		_handle_requeue_limit(job_ptr, caller);
+		break;
+	}
+}
+
 static int _job_complete(job_record_t *job_ptr, uid_t uid, bool requeue,
 			 bool node_fail, uint32_t job_return_code)
 {
@@ -6189,13 +6265,17 @@ static int _job_complete(job_record_t *job_ptr, uid_t uid, bool requeue,
 		 * accounting logs. Set a new submit time so the restarted
 		 * job looks like a new job.
 		 */
+		int requeue_cause;
 		job_ptr->end_time = now;
 		if (job_ptr->bit_flags & GRACE_PREEMPT) {
+			requeue_cause = REQUEUE_CAUSE_PREEMPT;
 			job_state_set(job_ptr, (JOB_PREEMPTED | job_comp_flag));
 
 			/* clear signal sent on GracePeriod start */
 			job_ptr->bit_flags &= (~GRACE_PREEMPT);
 		} else {
+			requeue_cause = node_fail ? REQUEUE_CAUSE_NODE_FAIL :
+						    REQUEUE_CAUSE_FAILURE;
 			job_state_set(job_ptr, JOB_NODE_FAIL);
 			job_ptr->exit_code = job_return_code;
 		}
@@ -6215,7 +6295,12 @@ static int _job_complete(job_record_t *job_ptr, uid_t uid, bool requeue,
 					use_cloud = true;
 			}
 		}
-		if (!use_cloud)
+		/*
+		 * batch_flag only counts launch/prolog FAILURE-cause requeues;
+		 * preemption and node-failure requeues use their own counters
+		 * so they don't count toward MaxBatchRequeue.
+		 */
+		if (!use_cloud && (requeue_cause == REQUEUE_CAUSE_FAILURE))
 			job_ptr->batch_flag++;	/* only one retry */
 		job_ptr->restart_cnt++;
 
@@ -6240,8 +6325,8 @@ static int _job_complete(job_record_t *job_ptr, uid_t uid, bool requeue,
 			info("%s: requeue %pJ per user/system request",
 			     __func__, job_ptr);
 		}
-		/* hold job if over requeue limit */
-		_handle_requeue_limit(job_ptr, __func__);
+		/* hold job if over the per-cause requeue limit */
+		_handle_requeue_limits(job_ptr, requeue_cause, __func__);
 	} else if (IS_JOB_PENDING(job_ptr) && job_ptr->details &&
 		   job_ptr->batch_flag) {
 		/*
@@ -11956,6 +12041,8 @@ static bool _top_priority(job_record_t *job_ptr, uint32_t het_job_offset)
 			    && (job_ptr->state_reason != FAIL_QOS)
 			    && (job_ptr->state_reason != WAIT_HELD)
 			    && (job_ptr->state_reason != WAIT_HELD_USER)
+			    && (job_ptr->state_reason != WAIT_MAX_NODE_FAIL_REQUEUE)
+			    && (job_ptr->state_reason != WAIT_MAX_PREEMPT_REQUEUE)
 			    && job_ptr->state_reason != WAIT_MAX_REQUEUE) {
 				job_ptr->state_reason = WAIT_HELD;
 				xfree(job_ptr->state_desc);
@@ -12057,6 +12144,13 @@ static void _release_job_rec(job_record_t *job_ptr, uid_t uid)
 	job_state_unset_flag(job_ptr, JOB_SPECIAL_EXIT);
 	xfree(job_ptr->state_desc);
 	job_ptr->exit_code = 0;
+	/*
+	 * Releasing a hold clears the per-cause requeue counters so the job
+	 * gets a fresh allowance; otherwise a job held at a cause limit would
+	 * be re-held on its very next requeue of that cause.
+	 */
+	job_ptr->node_fail_requeue_cnt = 0;
+	job_ptr->preempt_requeue_cnt = 0;
 
 	if (job_ptr->licenses && !job_ptr->license_list) {
 		/*
@@ -14986,6 +15080,8 @@ static int _update_job(job_record_t *job_ptr, job_desc_msg_t *job_desc,
 		    * could launch before the extern step sets up x11.
 		    */
 		   && (job_ptr->state_reason != WAIT_PROLOG)
+		   && (job_ptr->state_reason != WAIT_MAX_NODE_FAIL_REQUEUE)
+		   && (job_ptr->state_reason != WAIT_MAX_PREEMPT_REQUEUE)
 		   && (job_ptr->state_reason != WAIT_MAX_REQUEUE)) {
 		job_ptr->state_reason = WAIT_NO_REASON;
 		xfree(job_ptr->state_desc);
@@ -17032,6 +17128,8 @@ extern bool job_independent(job_record_t *job_ptr)
 	    (job_ptr->state_reason == WAIT_HELD) ||
 	    (job_ptr->state_reason == WAIT_HELD_USER) ||
 	    (job_ptr->state_reason == WAIT_MAX_REQUEUE) ||
+	    (job_ptr->state_reason == WAIT_MAX_NODE_FAIL_REQUEUE) ||
+	    (job_ptr->state_reason == WAIT_MAX_PREEMPT_REQUEUE) ||
 	    (job_ptr->state_reason == WAIT_RESV_DELETED) ||
 	    (job_ptr->state_reason == WAIT_RESV_INVALID) ||
 	    (job_ptr->state_reason == WAIT_DEP_INVALID))
@@ -17938,9 +18036,17 @@ reply:
 		debug("%s: Holding %pJ, requeue-hold exit", __func__, job_ptr);
 		job_ptr->priority = 0;
 	}
-	if (flags & JOB_LAUNCH_FAILED) {
+	/*
+	 * Classify and count this requeue by cause:
+	 *   preemption       -> PREEMPT bucket
+	 *   launch/prolog    -> FAILURE bucket (existing MaxBatchRequeue guard)
+	 *   user/operator    -> counted with PREEMPT (not the job's fault)
+	 */
+	if (preempt) {
+		_handle_requeue_limits(job_ptr, REQUEUE_CAUSE_PREEMPT, __func__);
+	} else if (flags & JOB_LAUNCH_FAILED) {
 		job_ptr->batch_flag++;
-		_handle_requeue_limit(job_ptr, __func__);
+		_handle_requeue_limits(job_ptr, REQUEUE_CAUSE_FAILURE, __func__);
 
 		/* If job not already held, make it so if needed. */
 		if (!(job_ptr->job_state & JOB_REQUEUE_HOLD) &&
@@ -17960,6 +18066,15 @@ reply:
 			}
 			job_ptr->priority = 0;
 		}
+	} else if (!(flags & (JOB_REQUEUE_HOLD | JOB_SPECIAL_EXIT))) {
+		/*
+		 * Plain user/operator requeue (scontrol requeue) counts in the
+		 * PREEMPT bucket. A requeue that also holds the job
+		 * (scontrol requeuehold / requeue with special-exit) is an
+		 * explicit user hold: don't count it and don't let the limit
+		 * relabel its WAIT_HELD_USER reason.
+		 */
+		_handle_requeue_limits(job_ptr, REQUEUE_CAUSE_USER, __func__);
 	}
 
 	/*
