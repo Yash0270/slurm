@@ -2405,10 +2405,22 @@ The value may not exceed 65533.
 
 .TP
 \fBMaxBatchRequeue\fR
-Maximum number of times a batch job may be automatically requeued before
-being marked as JobHeldAdmin. (Mainly useful when the \fBSchedulerParameters\fR
-option \fBnohold_on_prolog_fail\fR is enabled.)
-The default value is 5.
+Maximum number of times a batch job may be requeued due to launch or
+prolog failures before being held. The default value is 5.
+.IP
+
+.TP
+\fBMaxNodeFailRequeue\fR
+Maximum number of times a batch job may be requeued because an allocated
+node failed before the job is held. Prevents a bad job from cannibalizing
+the cluster. A value of 0 disables the limit. The default value is 5.
+.IP
+
+.TP
+\fBMaxPreemptRequeue\fR
+Maximum number of times a batch job may be requeued due to preemption or
+operator requeue before the job is held. A value of 0 disables the limit.
+The default value is 100.
 .IP
 
 .TP

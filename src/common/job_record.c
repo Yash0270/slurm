@@ -2003,6 +2003,10 @@ extern void job_record_pack_common(job_record_t *dump_job_ptr,
 		pack32(dump_job_ptr->req_switch, buffer);
 		pack_time(dump_job_ptr->resize_time, buffer);
 		pack16(dump_job_ptr->restart_cnt, buffer);
+		if (for_state) {
+			pack32(dump_job_ptr->node_fail_requeue_cnt, buffer);
+			pack32(dump_job_ptr->preempt_requeue_cnt, buffer);
+		}
 		packstr(dump_job_ptr->resv_name, buffer);
 		packstr(dump_job_ptr->resv_ports, buffer);
 
@@ -2288,6 +2292,8 @@ extern int job_record_unpack_common(job_record_t *job_ptr,
 		safe_unpack32(&job_ptr->req_switch, buffer);
 		safe_unpack_time(&job_ptr->resize_time, buffer);
 		safe_unpack16(&job_ptr->restart_cnt, buffer);
+		safe_unpack32(&job_ptr->node_fail_requeue_cnt, buffer);
+		safe_unpack32(&job_ptr->preempt_requeue_cnt, buffer);
 		safe_unpackstr(&job_ptr->resv_name, buffer);
 		safe_unpackstr(&job_ptr->resv_ports, buffer);
 

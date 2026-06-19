@@ -3971,6 +3971,8 @@ static void _pack_slurm_conf(const slurm_conf_t *conf,
 
 		pack32(conf->max_array_sz, buffer);
 		pack32(conf->max_batch_requeue, buffer);
+		pack32(conf->max_node_fail_requeue, buffer);
+		pack32(conf->max_preempt_requeue, buffer);
 		pack32(conf->max_dbd_msgs, buffer);
 		packstr(conf->mail_domain, buffer);
 		packstr(conf->mail_prog, buffer);
@@ -4789,6 +4791,8 @@ static int _unpack_slurm_conf(slurm_conf_t **conf_ptr,
 
 		safe_unpack32(&conf->max_array_sz, buffer);
 		safe_unpack32(&conf->max_batch_requeue, buffer);
+		safe_unpack32(&conf->max_node_fail_requeue, buffer);
+		safe_unpack32(&conf->max_preempt_requeue, buffer);
 		safe_unpack32(&conf->max_dbd_msgs, buffer);
 		safe_unpackstr(&conf->mail_domain, buffer);
 		safe_unpackstr(&conf->mail_prog, buffer);
