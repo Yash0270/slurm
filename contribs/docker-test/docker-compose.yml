@@ -1,0 +1,108 @@
+# SLURM test cluster: mysql + slurmdbd + slurmctld + 2 compute nodes (c1,c2).
+# Build context is the repo root (..) so the SLURM source tree is available
+# to the Dockerfile. All SLURM roles share one image (slurm-local:26.11).
+
+x-slurm-image: &slurm-image
+  image: slurm-local:26.11
+  build:
+    context: ../..
+    dockerfile: contribs/docker-test/Dockerfile
+
+x-slurm-common: &slurm-common
+  <<: *slurm-image
+  # Shared config (read-only) + a named volume for logs.
+  # NOTE: slurmdbd.conf is intentionally NOT mounted here — only slurmdbd needs
+  # it, and it must be copied to a writable path with 0600/slurm perms (a :ro
+  # bind mount keeps host ownership, which slurmdbd rejects). See slurmdbd svc.
+  volumes:
+    - ./etc/slurm.conf:/etc/slurm/slurm.conf:ro
+    - ./etc/cgroup.conf:/etc/slurm/cgroup.conf:ro
+    - slurm_logs:/var/log/slurm
+  networks:
+    - slurm
+
+services:
+  mysql:
+    image: mariadb:10.11
+    hostname: mysql
+    container_name: slurm-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: slurm_acct_db
+      MYSQL_USER: slurm
+      MYSQL_PASSWORD: slurmpass
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - slurm
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  slurmdbd:
+    <<: *slurm-common
+    hostname: slurmdbd
+    container_name: slurm-slurmdbd
+    command: ["slurmdbd"]
+    environment:
+      DBHOST: mysql
+    # slurmdbd.conf staged read-only; entrypoint copies it to the real path
+    # with 0600/slurm ownership before starting slurmdbd.
+    volumes:
+      - ./etc/slurm.conf:/etc/slurm/slurm.conf:ro
+      - ./etc/cgroup.conf:/etc/slurm/cgroup.conf:ro
+      - ./etc/slurmdbd.conf:/etc/slurm/slurmdbd.conf.src:ro
+      - slurm_logs:/var/log/slurm
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  slurmctld:
+    <<: *slurm-common
+    hostname: slurmctld
+    container_name: slurm-slurmctld
+    command: ["slurmctld"]
+    environment:
+      DBDHOST: slurmdbd
+    volumes:
+      - ./etc/slurm.conf:/etc/slurm/slurm.conf:ro
+      - ./etc/cgroup.conf:/etc/slurm/cgroup.conf:ro
+      - slurm_logs:/var/log/slurm
+      - slurmctld_state:/var/spool/slurmctld
+    depends_on:
+      - slurmdbd
+
+  c1:
+    <<: *slurm-common
+    hostname: c1
+    container_name: slurm-c1
+    command: ["slurmd"]
+    privileged: true
+    environment:
+      CTLDHOST: slurmctld
+      SLURMD_NODENAME: c1
+    depends_on:
+      - slurmctld
+
+  c2:
+    <<: *slurm-common
+    hostname: c2
+    container_name: slurm-c2
+    command: ["slurmd"]
+    privileged: true
+    environment:
+      CTLDHOST: slurmctld
+      SLURMD_NODENAME: c2
+    depends_on:
+      - slurmctld
+
+networks:
+  slurm:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  slurm_logs:
+  slurmctld_state:
