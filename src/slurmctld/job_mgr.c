@@ -366,8 +366,15 @@ static void _add_job_hash(job_record_t *job_ptr);
 static void _add_job_hash_sluid(job_record_t *job_ptr);
 static void _add_job_array_hash(job_record_t *job_ptr);
 static void _handle_requeue_limit(job_record_t *job_ptr, const char *caller);
+/*
+ * Requeue cause — each maps to its own independent counter:
+ *   JOB_LAUNCH_FAILURE → job launch or prolog errors → batch_requeue_cnt
+ *   NODE_FAIL          → allocated node died         → node_fail_requeue_cnt
+ *   PREEMPT            → preempted by higher-pri job → preempt_requeue_cnt
+ *   OPERATOR           → admin scontrol requeue      → preempt_requeue_cnt
+ */
 typedef enum {
-	REQUEUE_CAUSE_FAILURE,
+	REQUEUE_CAUSE_JOB_LAUNCH_FAILURE,
 	REQUEUE_CAUSE_NODE_FAIL,
 	REQUEUE_CAUSE_PREEMPT,
 	REQUEUE_CAUSE_OPERATOR,
@@ -6142,8 +6149,8 @@ static void _handle_requeue_limits(job_record_t *job_ptr,
 	switch (cause) {
 	case REQUEUE_CAUSE_NODE_FAIL:
 		job_ptr->node_fail_requeue_cnt++;
-		/* Hold only when limit is set (non-zero) and exceeded */
-		if (slurm_conf.max_node_fail_requeue &&
+		/* Hold only when limit is set (> 0) and exceeded */
+		if ((slurm_conf.max_node_fail_requeue > 0) &&
 		    (job_ptr->node_fail_requeue_cnt >
 		     slurm_conf.max_node_fail_requeue))
 			_hold_requeue_limit(
@@ -6154,8 +6161,8 @@ static void _handle_requeue_limits(job_record_t *job_ptr,
 	case REQUEUE_CAUSE_PREEMPT:
 	case REQUEUE_CAUSE_OPERATOR:
 		job_ptr->preempt_requeue_cnt++;
-		/* Hold only when limit is set (non-zero) and exceeded */
-		if (slurm_conf.max_preempt_requeue &&
+		/* Hold only when limit is set (> 0) and exceeded */
+		if ((slurm_conf.max_preempt_requeue > 0) &&
 		    (job_ptr->preempt_requeue_cnt >
 		     slurm_conf.max_preempt_requeue))
 			_hold_requeue_limit(
@@ -6163,7 +6170,7 @@ static void _handle_requeue_limits(job_record_t *job_ptr,
 				"preemption requeue limit exceeded",
 				caller);
 		break;
-	case REQUEUE_CAUSE_FAILURE:
+	case REQUEUE_CAUSE_JOB_LAUNCH_FAILURE:
 	default:
 		_handle_requeue_limit(job_ptr, caller);
 		break;
@@ -6258,7 +6265,7 @@ static int _job_complete(job_record_t *job_ptr, uid_t uid, bool requeue,
 			job_ptr->bit_flags &= (~GRACE_PREEMPT);
 		} else {
 			requeue_cause = node_fail ? REQUEUE_CAUSE_NODE_FAIL :
-						    REQUEUE_CAUSE_FAILURE;
+						    REQUEUE_CAUSE_JOB_LAUNCH_FAILURE;
 			job_state_set(job_ptr, JOB_NODE_FAIL);
 			job_ptr->exit_code = job_return_code;
 		}
@@ -6283,7 +6290,7 @@ static int _job_complete(job_record_t *job_ptr, uid_t uid, bool requeue,
 		 * preemption and node-failure requeues use their own counters
 		 * so they don't count toward MaxBatchRequeue.
 		 */
-		if (!use_cloud && (requeue_cause == REQUEUE_CAUSE_FAILURE))
+		if (!use_cloud && (requeue_cause == REQUEUE_CAUSE_JOB_LAUNCH_FAILURE))
 			job_ptr->batch_flag++;	/* only one retry */
 		job_ptr->restart_cnt++;
 
@@ -18018,7 +18025,7 @@ reply:
 		_handle_requeue_limits(job_ptr, REQUEUE_CAUSE_PREEMPT, __func__);
 	} else if (flags & JOB_LAUNCH_FAILED) {
 		job_ptr->batch_flag++;
-		_handle_requeue_limits(job_ptr, REQUEUE_CAUSE_FAILURE, __func__);
+		_handle_requeue_limits(job_ptr, REQUEUE_CAUSE_JOB_LAUNCH_FAILURE, __func__);
 
 		/* If job not already held, make it so if needed. */
 		if (!(job_ptr->job_state & JOB_REQUEUE_HOLD) &&
