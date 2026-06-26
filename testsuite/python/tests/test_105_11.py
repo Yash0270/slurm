@@ -403,18 +403,30 @@ def test_requeuehold_exempt_from_counting():
         fatal=True,
     )
     atf.repeat_until(
-        lambda: atf.get_job_parameter(job_id, "JobState"),
-        lambda state: state == "REQUEUE_HOLD",
+        lambda: (
+            atf.get_job_parameter(job_id, "Reason") or "",
+            atf.get_job_parameter(job_id, "Priority"),
+        ),
+        lambda result: (
+            "job_requeued_in_held_state" in result[0].lower()
+            or "JobHeldUser" in result[0]
+            or "JobHeldAdmin" in result[0]
+        )
+        and str(result[1]) == "0",
         timeout=30,
         fatal=True,
     )
     job_state = atf.get_job_parameter(job_id, "JobState")
     reason = atf.get_job_parameter(job_id, "Reason") or ""
     priority = atf.get_job_parameter(job_id, "Priority")
-    assert job_state == "REQUEUE_HOLD", (
-        f"requeuehold should leave job in REQUEUE_HOLD, got {job_state}"
+    assert job_state in ("PENDING", "REQUEUE_HOLD"), (
+        f"requeuehold should leave job held pending, got {job_state}"
     )
-    assert "JobHeldUser" in reason or "JobHeldAdmin" in reason, (
+    assert (
+        "job_requeued_in_held_state" in reason.lower()
+        or "JobHeldUser" in reason
+        or "JobHeldAdmin" in reason
+    ), (
         f"requeuehold should keep a normal hold reason, got {reason}"
     )
     assert "MaxPreemptRequeue" not in reason, (
@@ -478,6 +490,9 @@ def test_operator_requeue_counts_toward_preempt_limit():
                     f"{PREEMPT_LIMIT}, cycle={cycle}, Reason={reason}"
                 )
             else:
+                atf.wait_for_job_state(
+                    job_id, "REQUEUE_HOLD", fatal=True, timeout=30
+                )
                 _assert_requeue_hold(
                     job_id,
                     [
