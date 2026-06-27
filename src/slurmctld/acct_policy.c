@@ -678,6 +678,21 @@ static void _set_highest_prio_qos_ptr(job_record_t *job_ptr)
 	if (!job_ptr->qos_list || !list_count(job_ptr->qos_list))
 		return;
 
+	/*
+	 * Running/suspended jobs stay on their dispatched QOS member
+	 * (see _foreach_cache_update_job()); only pending jobs get
+	 * the highest-priority head.
+	 */
+	if (!IS_JOB_PENDING(job_ptr)) {
+		slurmdb_qos_rec_t *qos_ptr =
+			list_find_first(job_ptr->qos_list,
+					slurmdb_find_qos_in_list,
+					&job_ptr->qos_id);
+		if (qos_ptr)
+			job_ptr->qos_ptr = qos_ptr;
+		return;
+	}
+
 	job_ptr->qos_ptr = list_peek(job_ptr->qos_list);
 	job_ptr->qos_id = job_ptr->qos_ptr->id;
 }
