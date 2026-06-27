@@ -17801,6 +17801,7 @@ static int _job_requeue_op(uid_t uid, job_record_t *job_ptr, bool preempt,
 	bool is_running = false, is_suspended = false, is_completed = false;
 	bool is_completing = false;
 	bool requeue_fini_called = false;
+	bool count_operator_requeue = true;
 	bool force_requeue = false;
 	time_t now = time(NULL);
 	uint32_t completing_flags = 0;
@@ -18013,6 +18014,7 @@ reply:
 			xstrdup("job requeued in special exit state");
 		debug("%s: Holding %pJ, special exit", __func__, job_ptr);
 		job_ptr->priority = 0;
+		count_operator_requeue = false;
 	}
 	if (flags & JOB_REQUEUE_HOLD) {
 		job_ptr->state_reason = WAIT_HELD_USER;
@@ -18020,6 +18022,7 @@ reply:
 		job_ptr->state_desc = xstrdup("job requeued in held state");
 		debug("%s: Holding %pJ, requeue-hold exit", __func__, job_ptr);
 		job_ptr->priority = 0;
+		count_operator_requeue = false;
 	}
 	if (preempt) {
 		_handle_requeue_limits(job_ptr, REQUEUE_CAUSE_PREEMPT, __func__);
@@ -18045,8 +18048,7 @@ reply:
 			}
 			job_ptr->priority = 0;
 		}
-	} else if (!(flags & (JOB_REQUEUE_HOLD | JOB_SPECIAL_EXIT)) &&
-		   validate_operator(uid)) {
+	} else if (count_operator_requeue && validate_operator(uid)) {
 		_handle_requeue_limits(job_ptr, REQUEUE_CAUSE_OPERATOR,
 				       __func__);
 	}

@@ -332,7 +332,7 @@ simultaneously running tasks has been reached.</li>
 <li><b>JobHeldUser</b> &mdash; The job is held by the user or an account
 coordinator. This is also applies whenever <code>scontrol uhold</code> is used.</li>
 
-<li><b>JobHeldMaxRequeue</b> &mdash; Job has been requeued enough times to
+<li><b>JobHoldMaxRequeue</b> &mdash; Job has been requeued enough times to
 reach the MAX_BATCH_REQUEUE limit.</li>
 
 <li><b>JobLaunchFailure</b> &mdash; The job could not be launched. This may

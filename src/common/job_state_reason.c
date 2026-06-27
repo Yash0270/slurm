@@ -306,7 +306,8 @@ const static entry_t jsra[] = {
 		.str = "AssocMaxSubmitJobLimit",
 	},
 	[WAIT_MAX_REQUEUE] = {
-		.str = "JobHeldMaxRequeue",
+		/* Keep legacy spelling for backward compatibility. */
+		.str = "JobHoldMaxRequeue",
 	},
 	[WAIT_ARRAY_TASK_LIMIT] = {
 		.str = "JobArrayTaskLimit",

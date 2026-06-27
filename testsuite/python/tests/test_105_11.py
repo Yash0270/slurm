@@ -394,53 +394,64 @@ def test_requeuehold_exempt_from_counting():
         "-N1 --exclusive --requeue --wrap 'sleep 600'",
         fatal=True,
     )
-    atf.wait_for_job_state(job_id, "RUNNING", fatal=True)
+    try:
+        for cycle in range(1, PREEMPT_LIMIT + 2):
+            atf.wait_for_job_state(job_id, "RUNNING", fatal=True, timeout=60)
 
-    # requeuehold - should NOT count
-    atf.run_command(
-        f"scontrol requeuehold {job_id}",
-        user=atf.properties["slurm-user"],
-        fatal=True,
-    )
-    atf.repeat_until(
-        lambda: (
-            atf.get_job_parameter(job_id, "Reason") or "",
-            atf.get_job_parameter(job_id, "Priority"),
-        ),
-        lambda result: (
-            "job_requeued_in_held_state" in result[0].lower()
-            or "JobHeldUser" in result[0]
-            or "JobHeldAdmin" in result[0]
-        )
-        and str(result[1]) == "0",
-        timeout=30,
-        fatal=True,
-    )
-    job_state = atf.get_job_parameter(job_id, "JobState")
-    reason = atf.get_job_parameter(job_id, "Reason") or ""
-    priority = atf.get_job_parameter(job_id, "Priority")
-    assert job_state in ("PENDING", "REQUEUE_HOLD"), (
-        f"requeuehold should leave job held pending, got {job_state}"
-    )
-    assert (
-        "job_requeued_in_held_state" in reason.lower()
-        or "JobHeldUser" in reason
-        or "JobHeldAdmin" in reason
-    ), (
-        f"requeuehold should keep a normal hold reason, got {reason}"
-    )
-    assert "MaxPreemptRequeue" not in reason, (
-        f"requeuehold should NOT trigger preemption limit, Reason={reason}"
-    )
-    assert "preemption_requeue_limit" not in reason.lower(), (
-        f"requeuehold should NOT relabel the hold as preemption, "
-        f"Reason={reason}"
-    )
-    assert str(priority) == "0", (
-        f"requeuehold job should have Priority=0, got {priority}"
-    )
+            # requeuehold - should NOT count
+            atf.run_command(
+                f"scontrol requeuehold {job_id}",
+                user=atf.properties["slurm-user"],
+                fatal=True,
+            )
+            atf.repeat_until(
+                lambda: (
+                    atf.get_job_parameter(job_id, "Reason") or "",
+                    atf.get_job_parameter(job_id, "Priority"),
+                ),
+                lambda result: (
+                    "job_requeued_in_held_state" in result[0].lower()
+                    or "JobHeldUser" in result[0]
+                    or "JobHeldAdmin" in result[0]
+                )
+                and str(result[1]) == "0",
+                timeout=30,
+                fatal=True,
+            )
+            job_state = atf.get_job_parameter(job_id, "JobState")
+            reason = atf.get_job_parameter(job_id, "Reason") or ""
+            priority = atf.get_job_parameter(job_id, "Priority")
+            assert job_state in ("PENDING", "REQUEUE_HOLD"), (
+                f"requeuehold should leave job held pending, got {job_state}"
+            )
+            assert (
+                "job_requeued_in_held_state" in reason.lower()
+                or "JobHeldUser" in reason
+                or "JobHeldAdmin" in reason
+            ), (
+                f"requeuehold should keep a normal hold reason after "
+                f"{cycle} attempts, got {reason}"
+            )
+            assert "MaxPreemptRequeue" not in reason, (
+                f"requeuehold should NOT trigger preemption limit after "
+                f"{cycle} attempts, Reason={reason}"
+            )
+            assert "preemption_requeue_limit" not in reason.lower(), (
+                f"requeuehold should NOT relabel the hold as preemption "
+                f"after {cycle} attempts, Reason={reason}"
+            )
+            assert str(priority) == "0", (
+                f"requeuehold job should have Priority=0, got {priority}"
+            )
 
-    atf.cancel_jobs([job_id])
+            if cycle <= PREEMPT_LIMIT:
+                atf.run_command(
+                    f"scontrol release {job_id}",
+                    user=atf.properties["slurm-user"],
+                    fatal=True,
+                )
+    finally:
+        atf.cancel_jobs([job_id])
 
 
 def test_user_requeue_exempt_from_counting():
