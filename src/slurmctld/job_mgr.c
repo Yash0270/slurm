@@ -365,7 +365,8 @@ static void _signal_pending_job_array_tasks(job_record_t *job_ptr,
 static void _add_job_hash(job_record_t *job_ptr);
 static void _add_job_hash_sluid(job_record_t *job_ptr);
 static void _add_job_array_hash(job_record_t *job_ptr);
-static void _handle_requeue_limit(job_record_t *job_ptr, const char *caller);
+static void _handle_max_batch_requeue_limit(job_record_t *job_ptr,
+					    const char *caller);
 /*
  * Requeue cause — each maps to its own independent counter:
  *   JOB_LAUNCH_FAILURE → job launch or prolog errors → batch_requeue_cnt
@@ -6113,7 +6114,8 @@ extern int prolog_complete(prolog_complete_msg_t *msg)
 	return SLURM_SUCCESS;
 }
 
-static void _handle_requeue_limit(job_record_t *job_ptr, const char *caller)
+static void _handle_max_batch_requeue_limit(job_record_t *job_ptr,
+					    const char *caller)
 {
 	if (job_ptr->batch_flag <= slurm_conf.max_batch_requeue)
 		return;
@@ -6172,7 +6174,7 @@ static void _handle_requeue_limits(job_record_t *job_ptr,
 		break;
 	case REQUEUE_CAUSE_JOB_LAUNCH_FAILURE:
 	default:
-		_handle_requeue_limit(job_ptr, caller);
+		_handle_max_batch_requeue_limit(job_ptr, caller);
 		break;
 	}
 }
@@ -6285,11 +6287,6 @@ static int _job_complete(job_record_t *job_ptr, uid_t uid, bool requeue,
 					use_cloud = true;
 			}
 		}
-		/*
-		 * batch_flag only counts launch/prolog FAILURE-cause requeues;
-		 * preemption and node-failure requeues use their own counters
-		 * so they don't count toward MaxBatchRequeue.
-		 */
 		if (!use_cloud && (requeue_cause == REQUEUE_CAUSE_JOB_LAUNCH_FAILURE))
 			job_ptr->batch_flag++;	/* only one retry */
 		job_ptr->restart_cnt++;
