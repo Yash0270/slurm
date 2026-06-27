@@ -6148,7 +6148,7 @@ static void _handle_requeue_limits(job_record_t *job_ptr,
 {
 	switch (cause) {
 	case REQUEUE_CAUSE_NODE_FAIL:
-		job_ptr->node_fail_requeue_cnt++;
+		++job_ptr->node_fail_requeue_cnt;
 		/* Hold only when limit is set (> 0) and exceeded */
 		if ((slurm_conf.max_node_fail_requeue > 0) &&
 		    (job_ptr->node_fail_requeue_cnt >
@@ -6160,7 +6160,7 @@ static void _handle_requeue_limits(job_record_t *job_ptr,
 		break;
 	case REQUEUE_CAUSE_PREEMPT:
 	case REQUEUE_CAUSE_OPERATOR:
-		job_ptr->preempt_requeue_cnt++;
+		++job_ptr->preempt_requeue_cnt;
 		/* Hold only when limit is set (> 0) and exceeded */
 		if ((slurm_conf.max_preempt_requeue > 0) &&
 		    (job_ptr->preempt_requeue_cnt >
