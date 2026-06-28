@@ -15,6 +15,7 @@
 * Fix parsing issue of "sacctmgr load" when trying to load a file that contains typed TRES.
 * Error if salloc/sbatch/srun --requeue has an invalid option specified
 * slurmctld - Fix ~37 second extra delay in retries for slurmdbd reconnection and state saves on NTP-synced systems.
+* slurmctld - Fix per-user and per-account QOS TRES usage (e.g. GRES/GPU) being recharged against the highest-priority QOS for a running job submitted with multiple QOS on every state reload (scontrol reconfigure, restart, backup takeover), which inflated that QOS's counters and could spuriously block jobs with QOSMaxGRESPerUser. Running/suspended jobs now stay attributed to the QOS member they were dispatched under.
 
 ## Changes in 26.05.0
 
